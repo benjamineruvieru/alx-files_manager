@@ -6,7 +6,10 @@ class DBClient {
     const port = process.env.DB_PORT || 27017;
     const database = process.env.DB_DATABASE || "files_manager";
     const uri = `mongodb://${host}:${port}/${database}`;
-    this.client = new MongoClient(uri);
+    this.client = new MongoClient(uri, {
+      useUnifiedTopology: true,
+      useNewUrlParser: true,
+    });
   }
 
   async isAlive() {
@@ -44,6 +47,14 @@ class DBClient {
     } finally {
       await this.client.close();
     }
+  }
+
+  /**
+   * Retrieves a reference to the `users` collection.
+   * @returns {Promise<Collection>}
+   */
+  async usersCollection() {
+    return this.client.db().collection("users");
   }
 }
 
