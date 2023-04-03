@@ -1,4 +1,3 @@
-const { isRedisAlive, isDBAlive, countUsers, countFiles } = require("../utils");
 const dbClient = require("../utils/db");
 const redisClient = require("../utils/redis");
 
