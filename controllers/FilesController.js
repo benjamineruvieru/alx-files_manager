@@ -4,6 +4,9 @@ import { ObjectID } from "mongodb";
 import mime from "mime-types";
 import dbClient from "../utils/db";
 import redisClient from "../utils/redis";
+import Queue from "bull";
+
+const fileQueue = new Queue("fileQueue", "redis://127.0.0.1:6379");
 
 const FilesController = {
   async getUser(request) {
