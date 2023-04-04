@@ -1,37 +1,64 @@
-const dbClient = require("../utils/db");
-const sha1 = require("sha1");
+import sha1 from "sha1";
+import { ObjectID } from "mongodb";
+import Queue from "bull";
+import dbClient from "../utils/db";
+import redisClient from "../utils/redis";
 
-const UsersController = {
-  async postNew(req, res) {
-    const { email, password } = req.body;
+const userQueue = new Queue("userQueue", "redis://127.0.0.1:6379");
+
+class UsersController {
+  static postNew(request, response) {
+    const { email } = request.body;
+    const { password } = request.body;
 
     if (!email) {
-      return res.status(400).json({ error: "Missing email" });
+      response.status(400).json({ error: "Missing email" });
+      return;
     }
-
     if (!password) {
-      return res.status(400).json({ error: "Missing password" });
+      response.status(400).json({ error: "Missing password" });
+      return;
     }
 
-    const existingUser = await (
-      await dbClient.usersCollection()
-    ).findOne({ email });
+    const users = dbClient.db.collection("users");
+    users.findOne({ email }, (err, user) => {
+      if (user) {
+        response.status(400).json({ error: "Already exist" });
+      } else {
+        const hashedPassword = sha1(password);
+        users
+          .insertOne({
+            email,
+            password: hashedPassword,
+          })
+          .then((result) => {
+            response.status(201).json({ id: result.insertedId, email });
+            userQueue.add({ userId: result.insertedId });
+          })
+          .catch((error) => console.log(error));
+      }
+    });
+  }
 
-    if (existingUser) {
-      return res.status(400).json({ error: "Already exists" });
+  static async getMe(request, response) {
+    const token = request.header("X-Token");
+    const key = `auth_${token}`;
+    const userId = await redisClient.get(key);
+    if (userId) {
+      const users = dbClient.db.collection("users");
+      const idObject = new ObjectID(userId);
+      users.findOne({ _id: idObject }, (err, user) => {
+        if (user) {
+          response.status(200).json({ id: userId, email: user.email });
+        } else {
+          response.status(401).json({ error: "Unauthorized" });
+        }
+      });
+    } else {
+      console.log("Hupatikani!");
+      response.status(401).json({ error: "Unauthorized" });
     }
-
-    try {
-      const insertionInfo = await (
-        await dbClient.usersCollection()
-      ).insertOne({ email, password: sha1(password) });
-      const userId = insertionInfo.insertedId.toString();
-
-      return res.status(201).json({ email, id: userId });
-    } catch (err) {
-      return res.status(500).json({ error: "Server error" });
-    }
-  },
-};
+  }
+}
 
 module.exports = UsersController;
